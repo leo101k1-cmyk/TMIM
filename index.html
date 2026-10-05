@@ -33,25 +33,25 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ==========================================
         // 🛡️ 系統安全設定 (帳號白名單)
         // ==========================================
         window.systemConfig = {
-            // 是否啟用帳號白名單限制？ (true: 啟用限制 / false: 關閉，任何人皆可登入)
-            enableWhitelist: false, 
+            // 是否啟用帳號白名單限制？ (true: 啟用限制 / false: 關閉，任何 Google 帳號皆可登入)
+            enableWhitelist: true, 
             
-            // 允許登入的 Email 清單 (請替換成您與同事的真實 Email)
+            // 允許登入的 Email 清單
             allowedEmails: [
-                'your.email@gmail.com',
-                'boss@example.com'
+                'leo101k1@gmail.com',
+                'aa@laab.com.tw'
             ]
         };
 
         // ==========================================
-        // 🔥 您的專屬 Firebase 金鑰
+        // 🔥 Firebase 金鑰設定
         // ==========================================
         const currentAppId = 'inventory-master-9d841'; 
         
@@ -72,7 +72,6 @@
             allProjects: [], 
             allUsersMap: {}, 
             currentView: 'login',
-            loginMode: 'login', // 'login' 或 'register'
             dashboardTab: 'active', 
             selectedRecordId: null,
             selectedItemId: null,
@@ -112,7 +111,7 @@
                                 window.state.currentView = 'dashboard';
                             }
                         } else {
-                            // 若剛註冊/綁定資料還沒寫入，設定預設並放行
+                            // 若剛登入資料還沒寫入，設定預設並放行
                             window.state.currentUser = { uid: user.uid, name: user.displayName || '使用者' };
                             if (window.state.currentView === 'login') window.state.currentView = 'dashboard';
                         }
@@ -177,7 +176,10 @@
             console.error("Firebase init failed", e);
             window.state.isLoading = false;
             window.state.currentView = 'login';
-            setTimeout(() => window.render(), 100);
+            setTimeout(() => {
+                window.render();
+                window.showToast('系統連線異常，請稍後重新載入網頁', 'error');
+            }, 100);
         }
 
         window.syncProjectToCloud = async (project) => {
@@ -382,19 +384,8 @@
             </div>
         `;
 
-        window.toggleLoginMode = () => {
-            window.state.loginMode = window.state.loginMode === 'login' ? 'register' : 'login';
-            window.render();
-        };
-
+        // 嚴格版 Google 登入畫面 (移除測試帳號與Email輸入)
         window.getLoginHTML = () => {
-            const isLogin = window.state.loginMode === 'login';
-            const registerLinkHTML = window.systemConfig.enableWhitelist ? '' : `
-                <button onclick="window.toggleLoginMode()" class="text-indigo-600 text-sm font-bold hover:underline mt-4">
-                    ${isLogin ? '還沒有帳號？點此註冊' : '已有帳號？點此登入'}
-                </button>
-            `;
-
             return `
             <div class="flex-1 flex flex-col justify-center px-8 bg-gradient-to-br from-indigo-50 to-white relative z-10 overflow-y-auto py-8">
                 <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-4xl shadow-lg mb-6 mx-auto shrink-0">
@@ -404,147 +395,29 @@
                 <p class="text-center text-gray-500 mb-8 text-sm font-medium"><i class="fas fa-cloud text-indigo-400 mr-1"></i> 雲端即時同步版</p>
                 <div class="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 flex flex-col items-center shrink-0">
                     
-                    ${window.systemConfig.enableWhitelist ? `<div class="w-full bg-red-50 text-red-600 text-xs p-3 rounded-lg font-bold mb-4 flex items-center gap-2 border border-red-100"><i class="fas fa-lock"></i> 系統已啟用存取限制，僅限受邀帳號登入。</div>` : ''}
+                    ${window.systemConfig.enableWhitelist ? `<div class="w-full bg-red-50 text-red-600 text-xs p-3 rounded-lg font-bold mb-6 flex items-center gap-2 border border-red-100"><i class="fas fa-lock"></i> 系統已啟用存取限制，僅限受邀帳號登入。</div>` : ''}
                     
-                    <h3 class="text-center text-lg font-bold text-gray-800 mb-5">${isLogin ? '歡迎回來，請登入' : '建立新帳號'}</h3>
+                    <h3 class="text-center text-lg font-bold text-gray-800 mb-5">請使用 Google 帳號登入</h3>
                     
-                    <div class="w-full space-y-3 mb-5">
-                        ${!isLogin ? `<input type="text" id="auth-name" placeholder="您的姓名或暱稱" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm">` : ''}
-                        <input type="email" id="auth-email" placeholder="Email 信箱" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
-                        <input type="password" id="auth-password" placeholder="密碼 (至少6碼)" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
-                    </div>
-                    
-                    <button onclick="window.submitEmailAuth()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl shadow-md hover:bg-indigo-700 active:scale-95 transition-all text-base mb-4">
-                        ${isLogin ? '登入' : '註冊帳號'}
-                    </button>
-
-                    <div class="w-full flex items-center justify-between mb-4">
-                        <hr class="flex-1 border-gray-200">
-                        <span class="px-3 text-xs text-gray-400 font-bold uppercase">或</span>
-                        <hr class="flex-1 border-gray-200">
-                    </div>
-
-                    <button onclick="window.handleGoogleLogin()" class="w-full bg-white border border-gray-300 text-gray-700 font-bold py-3 rounded-xl shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-sm flex justify-center items-center gap-3">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24">
+                    <button onclick="window.handleGoogleLogin()" class="w-full bg-white border border-gray-300 text-gray-700 font-bold py-4 rounded-xl shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-base flex justify-center items-center gap-3">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24">
                             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                         </svg>
-                        Google 登入
+                        使用 Google 帳號繼續
                     </button>
                     
-                    ${registerLinkHTML}
+                    <p class="text-xs text-gray-400 mt-5 text-center px-4">登入即表示您同意系統記錄您的操作紀錄以供盤點追蹤。</p>
                 </div>
             </div>
             `;
         };
         
-        window.submitEmailAuth = async () => {
-            const isLogin = window.state.loginMode === 'login';
-            const email = document.getElementById('auth-email').value.trim();
-            const password = document.getElementById('auth-password').value.trim();
-            const nameInput = document.getElementById('auth-name');
-            const name = nameInput ? nameInput.value.trim() : 'Email 用戶';
-
-            if (!email || !password) return window.showToast('請填寫完整 Email 與密碼', 'error');
-            if (password.length < 6) return window.showToast('密碼至少需要 6 個字元', 'error');
-            if (!isLogin && !name) return window.showToast('請填寫姓名或暱稱', 'error');
-
-            if (window.systemConfig.enableWhitelist) {
-                if (isLogin && !window.systemConfig.allowedEmails.includes(email)) {
-                    return window.showToast('⚠️️ 您的帳號不在授權名單內，禁止登入', 'error');
-                } else if (!isLogin) {
-                    return window.showToast('⚠️ 系統已啟用存取限制，目前不開放自由註冊帳號', 'error');
-                }
-            }
-
-            if (!auth || !auth.currentUser) {
-                window.state.currentUser = { uid: 'demo_' + Date.now(), name: isLogin ? '測試訪客' : name };
-                window.state.currentView = 'dashboard';
-                window.showToast(isLogin ? '✅ 模擬登入成功' : '✅ 模擬註冊成功');
-                window.render();
-                return;
-            }
-
-            try {
-                window.showToast(isLogin ? '登入中...' : '註冊中...', 'info');
-                let userCredential;
-                if (isLogin) {
-                    userCredential = await signInWithEmailAndPassword(auth, email, password);
-                    window.showToast('✅ 登入成功！');
-                } else {
-                    userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                    const user = userCredential.user;
-                    window.state.uid = user.uid;
-                    
-                    const userProfile = { uid: user.uid, name: name, email: user.email, registeredAt: new Date().toISOString() };
-                    try {
-                        await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'users', window.state.uid), userProfile);
-                    } catch (writeErr) {
-                        console.warn('寫入使用者資料失敗，但不影響註冊流程 (可能為權限阻擋)', writeErr);
-                    }
-                    
-                    try {
-                        await sendEmailVerification(user);
-                        window.showToast('✅ 註冊成功！驗證信已發送。');
-                    } catch(e) {
-                        window.showToast('✅ 註冊成功！(但驗證信發送失敗)', 'info');
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-                if (e.code === 'auth/operation-not-allowed') {
-                    window.showToast('⚠️ Firebase 未開啟 Email 驗證，自動切換為測試身分...', 'info');
-                    setTimeout(() => {
-                        window.state.currentUser = { uid: 'demo_' + Date.now(), name: isLogin ? '測試登入者' : (name || '測試註冊者') };
-                        window.state.currentView = 'dashboard';
-                        window.showToast('✅ 訪客模擬登入成功！');
-                        window.render();
-                    }, 1200);
-                }
-                else if (e.code === 'auth/email-already-in-use') window.showToast('此 Email 已被註冊', 'error');
-                else if (e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') window.showToast('帳號或密碼錯誤', 'error');
-                else window.showToast(isLogin ? '登入失敗' : '註冊失敗', 'error');
-            }
-        };
-
         window.handleGoogleLogin = async () => {
-            const showMockGoogleLogin = () => {
-                window.openModal(`
-                    <div class="text-center pb-2">
-                        <svg class="w-12 h-12 mx-auto mb-4" viewBox="0 0 24 24">
-                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                        </svg>
-                        <h2 class="text-xl font-medium text-gray-800 mb-1">選擇帳戶</h2>
-                        <p class="text-sm text-gray-600 mb-6">前往「盤點快手」</p>
-                        
-                        <div onclick="window.proceedMockGoogleLogin('王大明', 'ming@example.com')" class="flex items-center gap-4 p-3 border border-gray-200 rounded-full hover:bg-gray-50 cursor-pointer transition-colors mb-3">
-                            <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-sm">王</div>
-                            <div class="text-left flex-1">
-                                <div class="text-sm font-bold text-gray-800">王大明 (測試帳號)</div>
-                                <div class="text-xs text-gray-500">ming@example.com</div>
-                            </div>
-                        </div>
-                        
-                        <div onclick="window.proceedMockGoogleLogin('林小美', 'mei@example.com')" class="flex items-center gap-4 p-3 border border-gray-200 rounded-full hover:bg-gray-50 cursor-pointer transition-colors">
-                            <div class="w-8 h-8 rounded-full bg-pink-600 text-white flex items-center justify-center font-bold shadow-sm">林</div>
-                            <div class="text-left flex-1">
-                                <div class="text-sm font-bold text-gray-800">林小美 (測試帳號)</div>
-                                <div class="text-xs text-gray-500">mei@example.com</div>
-                            </div>
-                        </div>
-                    </div>
-                    <button onclick="window.closeModal()" class="w-full py-2.5 mt-4 text-gray-500 font-bold text-sm hover:bg-gray-100 rounded-xl transition-colors">取消</button>
-                `);
-            };
-
-            if (!auth || !auth.currentUser) {
-                showMockGoogleLogin();
-                return;
+            if (!auth) {
+                return window.showToast('系統正在初始化，請稍候重試', 'error');
             }
 
             const provider = new GoogleAuthProvider();
@@ -555,6 +428,7 @@
                 const result = await signInWithPopup(auth, provider);
                 const user = result.user;
                 
+                // 檢查白名單
                 if (window.systemConfig.enableWhitelist) {
                     if (!window.systemConfig.allowedEmails.includes(user.email)) {
                         await auth.signOut();
@@ -567,46 +441,26 @@
                 const userProfile = { uid: user.uid, name: user.displayName || 'Google 用戶', email: user.email, registeredAt: new Date().toISOString() };
                 
                 try {
+                    // 將新登入的使用者資訊寫入資料庫
                     await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'users', window.state.uid), userProfile);
                 } catch (writeErr) {
                     console.warn('寫入使用者資料失敗，但不影響登入流程 (可能為權限阻擋)', writeErr);
                 }
                 window.showToast('✅ 登入成功！');
             } catch (e) {
-                console.error(e);
-                if (e.code === 'auth/unauthorized-domain' || e.code === 'auth/popup-closed-by-user' || e.code === 'auth/popup-blocked') {
-                    showMockGoogleLogin();
+                console.error("Google Login Error:", e);
+                // 移除原有的測試帳號 fallback，失敗就是失敗，並顯示具體錯誤代碼
+                if (e.code === 'auth/popup-closed-by-user') {
+                    window.showToast('已取消 Google 登入', 'info');
+                } else if (e.code === 'auth/unauthorized-domain') {
+                    window.showToast('❌ 錯誤：目前的網域尚未加入 Firebase 授權名單', 'error');
+                } else if (e.code === 'auth/popup-blocked') {
+                    window.showToast('❌ 錯誤：登入視窗被瀏覽器阻擋 (請避免在 Iframe 內測試)', 'error');
                 } else {
-                    window.showToast('Google 登入失敗，或已取消', 'error');
+                    // 顯示詳細錯誤代碼方便除錯
+                    window.showToast('登入發生錯誤：' + (e.code || '未知錯誤'), 'error');
                 }
             }
-        };
-
-        window.proceedMockGoogleLogin = async (name, email) => {
-            if (window.systemConfig.enableWhitelist) {
-                if (!window.systemConfig.allowedEmails.includes(email)) {
-                    window.closeModal();
-                    return window.showToast('⚠️ 登入失敗：您的帳號不在授權名單內', 'error');
-                }
-            }
-
-            window.closeModal();
-            window.showToast('✅ 登入成功！');
-            
-            const mockUid = 'demo_' + Date.now();
-            window.state.uid = mockUid;
-            window.state.currentUser = { uid: mockUid, name: name, email: email };
-            
-            if (db) {
-                try {
-                    await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'users', mockUid), {
-                        uid: mockUid, name: name, email: email, registeredAt: new Date().toISOString()
-                    });
-                } catch(e) {}
-            }
-            
-            window.state.currentView = 'dashboard';
-            window.render();
         };
 
         window.getDashboardHTML = () => {
@@ -728,7 +582,7 @@
         window.confirmLogout = async () => {
             window.closeModal();
             if (auth && auth.currentUser) {
-                await signOut(auth); // 呼叫 Firebase 執行真實登出
+                await signOut(auth); 
             } else {
                 window.state.currentUser = null; 
                 window.state.selectedProjectId = null;
@@ -1477,7 +1331,7 @@
             
             const finalPhotos = [...window.state.tempInventoryPhotos];
             sessionItem.photos = finalPhotos;
-            sessionItem.photo = finalPhotos.length > 0 ? finalPhotos[0] : null; // 相容舊版
+            sessionItem.photo = finalPhotos.length > 0 ? finalPhotos[0] : null; 
             
             sessionItem.isChecked = true;
 
