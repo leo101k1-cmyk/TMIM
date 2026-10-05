@@ -60,7 +60,7 @@
             enableWhitelist: true, 
             allowedEmails: [
                 'leo101k1@gmail.com',
-                'kkb.aaa1@gmail.com'
+                'kkb.aaa1@gmail.com.'
             ]
         };
 
@@ -282,7 +282,8 @@
             scannerOverlay.classList.add('flex');
             
             if (!html5QrCode) {
-                html5QrCode = new Html5Qrcode("reader");
+                // 啟用 experimentalFeatures，若手機瀏覽器支援原生 BarcodeDetector API，可大幅提升一維條碼辨識速度
+                html5QrCode = new Html5Qrcode("reader", { experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
             }
 
             const qrCodeSuccessCallback = (decodedText, decodedResult) => {
@@ -290,9 +291,33 @@
                 window.stopBarcodeScan(decodedText);
             };
 
-            // 設定掃描框大小與偵測頻率
-            const config = { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.0 };
+            // 明確指定要求支援的條碼格式，特別加入 CODE_128 及其他常用一維條碼
+            const formatsToSupport = [
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.QR_CODE
+            ];
+
+            // 針對一維條碼進行特別設定優化
+            const config = { 
+                fps: 15, // 稍微提升掃描影格率
+                // 動態設定掃描框：寬度佔螢幕 90% (最多 350px)，高度固定 150px 呈現長方形，最適合掃描 1D 條碼
+                qrbox: (viewfinderWidth, viewfinderHeight) => {
+                    return { width: Math.min(viewfinderWidth * 0.9, 350), height: 150 };
+                }, 
+                formatsToSupport: formatsToSupport,
+                // 強制要求較高的鏡頭解析度，避免 Code128 的細線模糊導致無法辨識
+                videoConstraints: {
+                    facingMode: "environment",
+                    width: { min: 640, ideal: 1280, max: 1920 },
+                    height: { min: 480, ideal: 720, max: 1080 }
+                }
+            };
             
+            // 使用環境變數 (後置鏡頭) 搭配高解析度設定啟動
             html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
             .catch(err => {
                 console.error("Camera start error:", err);
