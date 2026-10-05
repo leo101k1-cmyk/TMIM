@@ -6,6 +6,8 @@
     <title>盤點快手 (Inventory Master)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- 引入 html5-qrcode 條碼掃描套件 -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
@@ -16,18 +18,33 @@
             from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        /* 修飾掃描器影片外觀 */
+        #reader video { border-radius: 1rem; object-fit: cover; }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen">
     <div id="app-container" class="w-full max-w-[430px] h-[100dvh] max-h-[900px] bg-white sm:rounded-[2.5rem] sm:border-[8px] border-gray-800 sm:shadow-2xl relative overflow-hidden flex flex-col">
         <div id="root" class="w-full h-full flex flex-col relative bg-gray-50"></div>
         
-        <div id="toast" class="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm font-bold opacity-0 pointer-events-none transition-opacity duration-300 z-50 flex items-center gap-2 w-max max-w-[90%]">
+        <!-- Toast 通知提升 z-index 確保在所有彈窗之上 -->
+        <div id="toast" class="absolute top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm font-bold opacity-0 pointer-events-none transition-opacity duration-300 z-[70] flex items-center gap-2 w-max max-w-[90%]">
             <i class="fas fa-info-circle"></i> <span id="toast-msg"></span>
         </div>
 
+        <!-- 條碼掃描全螢幕覆蓋層 -->
+        <div id="scanner-overlay" class="absolute inset-0 bg-black z-[60] hidden flex-col">
+            <div class="flex justify-between items-center p-4 bg-gray-900 text-white flex-shrink-0 shadow-md z-10">
+                <h3 class="font-bold text-lg"><i class="fas fa-barcode mr-2"></i>掃描條碼</h3>
+                <button onclick="window.stopBarcodeScan()" class="text-white bg-gray-700 hover:bg-gray-600 active:bg-gray-500 px-4 py-2 rounded-xl text-sm font-bold transition-colors">取消</button>
+            </div>
+            <div class="flex-1 w-full bg-black relative flex flex-col items-center justify-center p-4">
+                <div id="reader" class="w-full max-w-[400px] rounded-2xl overflow-hidden shadow-2xl bg-gray-900 border border-gray-700"></div>
+                <p class="text-gray-400 text-xs mt-6 text-center font-bold">請將條碼對準掃描框內<br>系統將自動進行辨識</p>
+            </div>
+        </div>
+
         <div id="modal-overlay" class="absolute inset-0 bg-black/50 z-40 hidden opacity-0 transition-opacity flex items-center justify-center p-4">
-            <div id="modal-content" class="bg-white rounded-2xl p-5 w-full shadow-xl transform scale-95 transition-transform"></div>
+            <div id="modal-content" class="bg-white rounded-2xl p-5 w-full shadow-xl transform scale-95 transition-transform max-h-[90vh] overflow-y-auto no-scrollbar"></div>
         </div>
     </div>
 
@@ -40,13 +57,10 @@
         // 🛡️ 系統安全設定 (帳號白名單)
         // ==========================================
         window.systemConfig = {
-            // 是否啟用帳號白名單限制？ (true: 啟用限制 / false: 關閉，任何 Google 帳號皆可登入)
             enableWhitelist: true, 
-            
-            // 允許登入的 Email 清單
             allowedEmails: [
                 'leo101k1@gmail.com',
-                'aa@laab.com.tw'
+                'kkb.aaa1@gmail.com'
             ]
         };
 
@@ -111,7 +125,6 @@
                                 window.state.currentView = 'dashboard';
                             }
                         } else {
-                            // 若剛登入資料還沒寫入，設定預設並放行
                             window.state.currentUser = { uid: user.uid, name: user.displayName || '使用者' };
                             if (window.state.currentView === 'login') window.state.currentView = 'dashboard';
                         }
@@ -158,7 +171,6 @@
                 }
             };
 
-            // 使用官方建議的登入狀態監聽器
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     setupRealtimeSync(user);
@@ -227,10 +239,10 @@
         window.showToast = (message, type = 'info') => {
             const toastEl = document.getElementById('toast');
             document.getElementById('toast-msg').innerText = message;
-            toastEl.className = `absolute top-10 left-1/2 transform -translate-x-1/2 px-5 py-3 rounded-full shadow-lg text-sm font-bold transition-opacity duration-300 z-50 flex items-center gap-2 w-max max-w-[90%] ${type === 'error' ? 'bg-red-500 text-white' : 'bg-gray-800 text-white'}`;
+            toastEl.className = `absolute top-10 left-1/2 transform -translate-x-1/2 px-5 py-3 rounded-full shadow-lg text-sm font-bold transition-opacity duration-300 z-[70] flex items-center gap-2 w-max max-w-[90%] ${type === 'error' ? 'bg-red-500 text-white' : 'bg-gray-800 text-white'}`;
             toastEl.style.opacity = '1';
             clearTimeout(toastTimeout);
-            toastTimeout = setTimeout(() => { toastEl.style.opacity = '0'; }, 2500);
+            toastTimeout = setTimeout(() => { toastEl.style.opacity = '0'; }, 3000);
         };
 
         window.openModal = (htmlContent) => {
@@ -259,6 +271,68 @@
             }
         };
 
+        // ==========================================
+        // 📷 條碼掃描核心功能 (使用 html5-qrcode)
+        // ==========================================
+        let html5QrCode = null;
+
+        window.startBarcodeScan = () => {
+            const scannerOverlay = document.getElementById('scanner-overlay');
+            scannerOverlay.classList.remove('hidden');
+            scannerOverlay.classList.add('flex');
+            
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+
+            const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+                // 掃描成功，傳入結果並關閉掃描器
+                window.stopBarcodeScan(decodedText);
+            };
+
+            // 設定掃描框大小與偵測頻率
+            const config = { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.0 };
+            
+            html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+            .catch(err => {
+                console.error("Camera start error:", err);
+                window.showToast("無法開啟相機，請確認瀏覽器已允許相機權限", "error");
+                window.stopBarcodeScan(); // 出錯時自動關閉介面
+            });
+        };
+
+        window.stopBarcodeScan = (decodedText = null) => {
+            const hideScannerUI = () => {
+                const scannerOverlay = document.getElementById('scanner-overlay');
+                scannerOverlay.classList.add('hidden');
+                scannerOverlay.classList.remove('flex');
+                
+                // 如果有掃描到文字，填入搜尋框並觸發搜尋
+                if (decodedText && typeof decodedText === 'string') {
+                    window.showToast(`✅ 辨識成功: ${decodedText}`);
+                    const input = document.getElementById('inventory-search-input');
+                    if(input) {
+                        input.value = decodedText;
+                        window.filterActiveInventory(decodedText);
+                    }
+                }
+            };
+
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    hideScannerUI();
+                }).catch((err) => {
+                    console.warn("Error stopping scanner", err);
+                    hideScannerUI();
+                });
+            } else {
+                hideScannerUI();
+            }
+        };
+
+        // ==========================================
+        // 報表匯出功能
+        // ==========================================
         window.showExportModal = () => {
             const today = new Date().toISOString().split('T')[0]; 
             window.openModal(`
@@ -384,7 +458,6 @@
             </div>
         `;
 
-        // 嚴格版 Google 登入畫面 (移除測試帳號與Email輸入)
         window.getLoginHTML = () => {
             return `
             <div class="flex-1 flex flex-col justify-center px-8 bg-gradient-to-br from-indigo-50 to-white relative z-10 overflow-y-auto py-8">
@@ -428,7 +501,6 @@
                 const result = await signInWithPopup(auth, provider);
                 const user = result.user;
                 
-                // 檢查白名單
                 if (window.systemConfig.enableWhitelist) {
                     if (!window.systemConfig.allowedEmails.includes(user.email)) {
                         await auth.signOut();
@@ -441,7 +513,6 @@
                 const userProfile = { uid: user.uid, name: user.displayName || 'Google 用戶', email: user.email, registeredAt: new Date().toISOString() };
                 
                 try {
-                    // 將新登入的使用者資訊寫入資料庫
                     await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'users', window.state.uid), userProfile);
                 } catch (writeErr) {
                     console.warn('寫入使用者資料失敗，但不影響登入流程 (可能為權限阻擋)', writeErr);
@@ -449,7 +520,6 @@
                 window.showToast('✅ 登入成功！');
             } catch (e) {
                 console.error("Google Login Error:", e);
-                // 移除原有的測試帳號 fallback，失敗就是失敗，並顯示具體錯誤代碼
                 if (e.code === 'auth/popup-closed-by-user') {
                     window.showToast('已取消 Google 登入', 'info');
                 } else if (e.code === 'auth/unauthorized-domain') {
@@ -457,7 +527,6 @@
                 } else if (e.code === 'auth/popup-blocked') {
                     window.showToast('❌ 錯誤：登入視窗被瀏覽器阻擋 (請避免在 Iframe 內測試)', 'error');
                 } else {
-                    // 顯示詳細錯誤代碼方便除錯
                     window.showToast('登入發生錯誤：' + (e.code || '未知錯誤'), 'error');
                 }
             }
@@ -1190,7 +1259,7 @@
                             <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-indigo-300 text-sm"></i>
                             <input type="text" id="inventory-search-input" placeholder="搜尋代碼或名稱..." onkeyup="window.filterActiveInventory(this.value)" class="w-full bg-indigo-900/50 border border-indigo-500 text-white placeholder-indigo-300 rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-white transition-all shadow-inner">
                         </div>
-                        <button onclick="window.simulateScan()" class="bg-indigo-500 text-white px-4 py-2 rounded-xl hover:bg-indigo-400 active:scale-95 transition-all flex items-center justify-center shadow-inner border border-indigo-400" title="開啟相機掃描"><i class="fas fa-barcode text-lg"></i></button>
+                        <button onclick="window.startBarcodeScan()" class="bg-indigo-500 text-white px-4 py-2 rounded-xl hover:bg-indigo-400 active:scale-95 transition-all flex items-center justify-center shadow-inner border border-indigo-400" title="開啟相機掃描"><i class="fas fa-barcode text-lg"></i></button>
                     </div>
                     <div class="px-5 py-4">
                         <div class="flex justify-between text-white text-xs font-bold mb-2"><span>盤點進度</span><span>${completedCount} / ${totalCount} (${progress}%)</span></div>
@@ -1351,13 +1420,6 @@
                 const searchStr = card.getAttribute('data-search') || '';
                 card.style.display = searchStr.includes(term) ? 'flex' : 'none';
             });
-        };
-        window.simulateScan = () => {
-            window.showToast('📷 開啟相機掃描條碼中...', 'info');
-            setTimeout(() => {
-                const input = document.getElementById('inventory-search-input');
-                if(input) { input.value = 'IT-001'; window.filterActiveInventory('IT-001'); window.showToast('✅ 成功辨識條碼: IT-001'); }
-            }, 1000);
         };
 
         window.finishCountSession = () => {
